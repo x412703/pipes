@@ -1,0 +1,127 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: bitbucket-sensor
+  namespace: argo-events
+spec:
+  # The Sensor pod must run with a service account that has permission
+  # to create Workflow objects in the argo-workflows namespace.
+  template:
+    serviceAccountName: argo-events-sa
+
+  eventBusName: default
+
+  # Two named dependencies, one per event type.
+  # Filtering happens here on the dependency, NOT on the trigger.
+  dependencies:
+    # Dependency 1 – merged PR targeting the main branch.
+    # Payload path: pullRequest.toRef.displayId  == "main"
+    # Payload path: eventKey                     == "pr:merged"
+    - name: pr-merged-main
+      eventSourceName: bitbucket-webhook
+      eventName: bitbucket-webhook
+      filters:
+        data:
+          - path: body.eventKey
+            type: string
+            value:
+              - "pr:merged"
+          - path: body.pullRequest.toRef.displayId
+            type: string
+            value:
+              - "main"
+
+    # Dependency 2 – push to the dev branch.
+    # Payload path: changes[0].ref.displayId == "dev"
+    # Payload path: eventKey                 == "repo:refs_changed"
+    - name: push-dev
+      eventSourceName: bitbucket-webhook
+      eventName: bitbucket-webhook
+      filters:
+        data:
+          - path: body.eventKey
+            type: string
+            value:
+              - "repo:refs_changed"
+          - path: body.changes.0.ref.displayId
+            type: string
+            value:
+              - "dev"
+
+  triggers:
+    # ── Trigger 1: merged PR → main ───────────────────────────────────────────
+    - template:
+        name: main-pr-merged-trigger
+        # Only fire when the pr-merged-main dependency is satisfied.
+        conditions: "pr-merged-main"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: ci-pipeline-main-
+                namespace: argo-workflows
+              spec:
+                workflowTemplateRef:
+                  name: ci-pipeline-template
+                arguments:
+                  parameters:
+                    - name: commit-sha
+                      # Placeholder – replaced by the parameter block below.
+                      value: ""
+                    - name: repo-name
+                      value: ""
+                    - name: branch
+                      value: "main"
+          # Extract values from the PR-merged payload and inject them into
+          # the workflow arguments before submission.
+          parameters:
+            # The actual merge-commit SHA lives at:
+            #   pullRequest.properties.mergeCommit.id
+            # (toRef.latestCommit is the tip of the target branch BEFORE the
+            #  merge and does NOT reflect the merge commit itself.)
+            - src:
+                dependencyName: pr-merged-main
+                dataKey: body.pullRequest.properties.mergeCommit.id
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: pr-merged-main
+                dataKey: body.pullRequest.toRef.repository.slug
+              dest: spec.arguments.parameters.1.value
+
+    # ── Trigger 2: push → dev ─────────────────────────────────────────────────
+    - template:
+        name: dev-push-trigger
+        conditions: "push-dev"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: ci-pipeline-dev-
+                namespace: argo-workflows
+              spec:
+                workflowTemplateRef:
+                  name: ci-pipeline-template
+                arguments:
+                  parameters:
+                    - name: commit-sha
+                      value: ""
+                    - name: repo-name
+                      value: ""
+                    - name: branch
+                      value: "dev"
+          parameters:
+            - src:
+                dependencyName: push-dev
+                dataKey: body.changes.0.toHash
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: push-dev
+                dataKey: body.repository.slug
+              dest: spec.arguments.parameters.1.value

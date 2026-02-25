@@ -1,0 +1,49 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: multi-env-applicationset
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - env: development
+            branch: dev
+            repo: repository
+          - env: staging
+            branch: staging
+            repo: repository
+          - env: production
+            branch: main
+            repo: repository
+  template:
+    metadata:
+      name: "{{repo}}-{{env}}"
+    spec:
+      project: default
+      source:
+        repoURL: git@bitbucket.example.com:proj/repository.git
+        targetRevision: "{{branch}}"
+        path: "k8s/{{env}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{env}}"
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

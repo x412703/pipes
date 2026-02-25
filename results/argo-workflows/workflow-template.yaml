@@ -1,0 +1,110 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ci-pipeline-template
+  namespace: argo-workflows
+spec:
+  entrypoint: ci-pipeline
+  arguments:
+    parameters:
+      - name: commit-sha
+      - name: repo-name
+      - name: branch
+  serviceAccountName: argo-workflows-sa
+  imagePullSecrets:
+    - name: harbor-secret
+  templates:
+    - name: ci-pipeline
+      steps:
+        - - name: clone-repo
+            template: clone-repo
+        - - name: build-push-image
+            template: build-push-image
+            arguments:
+              parameters:
+                - name: commit-sha
+                  value: "{{steps.clone-repo.outputs.parameters.commit-sha}}"
+                - name: repo-name
+                  value: "{{workflow.parameters.repo-name}}"
+                - name: branch
+                  value: "{{workflow.parameters.branch}}"
+
+    - name: clone-repo
+      outputs:
+        parameters:
+          - name: commit-sha
+            valueFrom:
+              path: /tmp/commit-sha
+      container:
+        image: alpine/git:latest
+        command:
+          - sh
+          - -c
+          - |
+            mkdir -p /home/git/.ssh
+            chmod 700 /home/git/.ssh
+            cp /ssh-key/ssh-privatekey /home/git/.ssh/id_rsa
+            chmod 600 /home/git/.ssh/id_rsa
+            
+            # Add Bitbucket host key to known_hosts
+            ssh-keyscan -H bitbucket.example.com >> /home/git/.ssh/known_hosts 2>/dev/null || true
+            
+            export GIT_SSH_COMMAND="ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no"
+            
+            git clone --depth 1 --branch {{workflow.parameters.branch}} \
+              git@bitbucket.example.com:proj/{{workflow.parameters.repo-name}}.git /workspace/repo
+            
+            cd /workspace/repo
+            git rev-parse HEAD > /tmp/commit-sha
+        volumeMounts:
+          - name: ssh-key
+            mountPath: /ssh-key
+            readOnly: true
+          - name: workspace
+            mountPath: /workspace
+
+    - name: build-push-image
+      inputs:
+        parameters:
+          - name: commit-sha
+          - name: repo-name
+          - name: branch
+      container:
+        image: harbor.example.com/library/kaniko:latest
+        command:
+          - /kaniko/executor
+          - --dockerfile=/workspace/repo/Dockerfile
+          - --context=/workspace/repo
+          - --insecure-registry=harbor.example.com
+          - --skip-tls-verify=true
+          - --destination=harbor.example.com/library/{{inputs.parameters.repo-name}}:{{inputs.parameters.branch}}-{{inputs.parameters.commit-sha}}
+          - --destination=harbor.example.com/library/{{inputs.parameters.repo-name}}:{{inputs.parameters.branch}}-latest
+        # Kaniko reads registry credentials from /kaniko/.docker/config.json.
+        # The docker-config volume (sourced from the harbor-secret docker-registry
+        # secret) is mounted there directly.  No env var is needed or used by kaniko
+        # for auth – the env var DOCKER_CONFIG_JSON that was here previously was
+        # incorrect and has been removed.
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: docker-config
+            mountPath: /kaniko/.docker
+            readOnly: true
+
+  volumes:
+    - name: ssh-key
+      secret:
+        secretName: git-ssh-key
+        defaultMode: 0600
+    - name: workspace
+      emptyDir: {}
+    - name: docker-config
+      secret:
+        secretName: harbor-secret
+        # A docker-registry secret stores credentials under the key
+        # ".dockerconfigjson".  Kaniko expects the file to be named
+        # "config.json" inside /kaniko/.docker/, so we remap it here.
+        items:
+          - key: .dockerconfigjson
+            path: config.json
