@@ -14,3 +14,11 @@ spec:
       port: "12000"
       endpoint: /bitbucket
       method: POST
+      # Validates the token Bitbucket sends in the "Authorization: Bearer <token>"
+      # header (configured under "Secret token" in the Bitbucket webhook settings).
+      # Create the secret with:
+      #   kubectl create secret generic bitbucket-webhook-token \
+      #     --from-literal=token=<your-secret-token> -n argo-events
+      authSecret:
+        name: bitbucket-webhook-token
+        key: token

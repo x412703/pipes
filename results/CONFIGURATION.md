@@ -21,7 +21,7 @@ Bitbucket sends:
 ```
 
 Sensor extracts and passes to Workflow:
-- Commit SHA: `event.body.pullRequest.toRef.latestCommit`
+- Commit SHA: `event.body.pullRequest.properties.mergeCommit.id`  ← the actual merge commit, NOT `toRef.latestCommit` (which is the tip of the target branch *before* the merge)
 - Repository name: `event.body.pullRequest.toRef.repository.slug`
 - Branch: `main` (hardcoded in trigger)
 
@@ -81,7 +81,7 @@ Created in:
 - `argo-events` namespace
 
 ### harbor-secret Secret
-Docker registry secret with type: `kubernetes.io/dockercfg`
+Docker registry secret with type: `kubernetes.io/dockerconfigjson`
 
 Contents:
 ```
