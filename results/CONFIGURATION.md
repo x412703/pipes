@@ -68,7 +68,32 @@ Examples:
 - `harbor.example.com/library/repository:dev-178864a7d521b6f5e720b386b2c2b0ef8563e0dc`
 - `harbor.example.com/library/repository:dev-latest`
 
+## EventSource Type
+
+The EventSource uses the native `bitbucketserver:` type, **not** the generic `webhook:` type.
+
+Key implications:
+- **HMAC-SHA256 validation**: Bitbucket Server signs each request body and sends `X-Hub-Signature: sha256=<hmac>`. The event source recomputes the HMAC and rejects non-matching requests. This requires `webhookSecret` (see below), **not** `authSecret` (which only validates `Authorization: Bearer` — a header Bitbucket Server does not send).
+- **`bitbucketserverBaseURL`**: Must be set to your Bitbucket Server REST API base URL (e.g. `https://bitbucket.example.com/rest`) before deploying. Required by the event source type even when `accessToken` is absent (passive mode).
+- **No auto-registration**: `accessToken` is intentionally omitted. The webhook URL must be configured manually in Bitbucket Server (Project/Repository → Settings → Webhooks). The URL to register is the external URL of the `bitbucket-webhook-eventsource-svc` service on port 12000, path `/bitbucket`.
+
 ## Secret Requirements
+
+### bitbucket-webhook-token Secret
+Used by the `bitbucketserver:` EventSource for **HMAC-SHA256** validation of incoming webhook requests.
+
+Bitbucket Server computes `HMAC-SHA256(body, secret)` and sends the result in the
+`X-Hub-Signature` header. Argo Events recomputes it and rejects mismatches.
+
+The `token` value here must match the **Secret** field configured in Bitbucket Server's webhook settings.
+
+```bash
+kubectl create secret generic bitbucket-webhook-token \
+  --from-literal=token=<your-webhook-secret> -n argo-events
+```
+
+Created in:
+- `argo-events` namespace only
 
 ### git-ssh-key Secret
 Contents:
