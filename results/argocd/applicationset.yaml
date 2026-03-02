@@ -5,6 +5,13 @@ metadata:
   name: argocd
 
 ---
+# All three Applications point to the main branch.  The project uses
+# Kustomize overlays so dev and prod manifests live side-by-side in a
+# single branch rather than being split across branches.
+#
+# Both environments deploy into the shared "app" namespace because the
+# single Ingress resource needs to reference both Services (Kubernetes
+# Ingress can only target Services in its own namespace).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -14,27 +21,24 @@ spec:
   generators:
     - list:
         elements:
-          - env: development
-            branch: dev
-            repo: repository
-          - env: staging
-            branch: staging
-            repo: repository
-          - env: production
-            branch: main
-            repo: repository
+          - env: dev
+            path: k8s/overlays/dev
+          - env: prod
+            path: k8s/overlays/prod
+          - env: ingress
+            path: k8s/ingress
   template:
     metadata:
-      name: "{{repo}}-{{env}}"
+      name: "repository-{{env}}"
     spec:
       project: default
       source:
         repoURL: git@bitbucket.example.com:proj/repository.git
-        targetRevision: "{{branch}}"
-        path: "k8s/{{env}}"
+        targetRevision: main
+        path: "{{path}}"
       destination:
         server: https://kubernetes.default.svc
-        namespace: "{{env}}"
+        namespace: app
       syncPolicy:
         syncOptions:
           - CreateNamespace=true

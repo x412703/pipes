@@ -52,8 +52,8 @@ spec:
             
             export GIT_SSH_COMMAND="ssh -i /home/git/.ssh/id_rsa -o StrictHostKeyChecking=no"
             
-            git clone --depth 1 --branch {{workflow.parameters.branch}} \
-              git@bitbucket.example.com:proj/{{workflow.parameters.repo-name}}.git /workspace/repo
+            git clone --depth 1 --branch "{{workflow.parameters.branch}}" \
+              "git@bitbucket.example.com:proj/{{workflow.parameters.repo-name}}.git" /workspace/repo
             
             cd /workspace/repo
             git rev-parse HEAD > /tmp/commit-sha
@@ -92,13 +92,24 @@ spec:
             mountPath: /kaniko/.docker
             readOnly: true
 
+  # volumeClaimTemplates creates a PVC that persists across all steps
+  # in the workflow. Unlike emptyDir (which is pod-scoped and NOT shared
+  # between steps), a PVC is shared across pods, allowing the build step
+  # to access files cloned in the clone step.
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
   volumes:
     - name: ssh-key
       secret:
         secretName: git-ssh-key
         defaultMode: 0600
-    - name: workspace
-      emptyDir: {}
     - name: docker-config
       secret:
         secretName: harbor-secret
