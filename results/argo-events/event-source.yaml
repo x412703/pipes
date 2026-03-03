@@ -9,44 +9,34 @@ spec:
     ports:
       - port: 12000
         targetPort: 12000
+
   bitbucketserver:
-    bitbucket-webhook:
-      # HTTP server configuration.
+    pr-merged:
       webhook:
         port: "12000"
         endpoint: /bitbucket
         method: POST
-
-      # Repositories to receive events from.
-      # Add more entries for additional repos.
       repositories:
         - projectKey: "PROJ"
           repositorySlug: "repository"
-
-      # Bitbucket Server event keys to accept.
-      # repo:refs_changed → push to dev branch trigger
-      # pr:merged         → merged PR to main branch trigger
       events:
-        - "repo:refs_changed"
         - "pr:merged"
-
-      # HMAC-SHA256 webhook secret.
-      # Bitbucket Server signs every request body with this secret and sends
-      # the result in the "X-Hub-Signature: sha256=<hmac>" header.
-      # Argo Events recomputes the HMAC and rejects requests that do not match.
-      #
-      # Configure the same value as the "Secret" field in Bitbucket Server's
-      # webhook settings (Project/Repository → Settings → Webhooks → Secret).
-      #
-      # Create the Kubernetes secret with:
-      #   kubectl create secret generic bitbucket-webhook-token \
-      #     --from-literal=token=<your-webhook-secret> -n argo-events
       webhookSecret:
         name: bitbucket-webhook-token
         key: token
+      bitbucketserverBaseURL: https://bitbucket.example.com/rest
 
-      # REST API base URL for this Bitbucket Server instance.
-      # Must include the /rest path suffix.
-      # Replace with your actual Bitbucket Server URL before deploying.
-      # (Required by the event source type even in passive/no-auto-register mode.)
+    refs-changed:
+      webhook:
+        port: "12000"
+        endpoint: /bitbucket
+        method: POST
+      repositories:
+        - projectKey: "PROJ"
+          repositorySlug: "repository"
+      events:
+        - "repo:refs_changed"
+      webhookSecret:
+        name: bitbucket-webhook-token
+        key: token
       bitbucketserverBaseURL: https://bitbucket.example.com/rest

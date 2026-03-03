@@ -20,34 +20,24 @@ spec:
     # Payload path: eventKey                     == "pr:merged"
     - name: pr-merged-main
       eventSourceName: bitbucket-webhook
-      eventName: bitbucket-webhook
+      eventName: pr-merged
       filters:
         data:
-          - path: body.eventKey
-            type: string
-            value:
-              - "pr:merged"
           - path: body.pullRequest.toRef.displayId
             type: string
-            value:
-              - "main"
+            value: ["main"]
 
     # Dependency 2 – push to the dev branch.
     # Payload path: changes[0].ref.displayId == "dev"
     # Payload path: eventKey                 == "repo:refs_changed"
     - name: push-dev
       eventSourceName: bitbucket-webhook
-      eventName: bitbucket-webhook
+      eventName: refs-changed
       filters:
         data:
-          - path: body.eventKey
-            type: string
-            value:
-              - "repo:refs_changed"
           - path: body.changes.0.ref.displayId
             type: string
-            value:
-              - "dev"
+            value: ["dev"]
 
   triggers:
     # ── Trigger 1: merged PR → main ───────────────────────────────────────────
@@ -74,6 +64,8 @@ spec:
                       value: ""
                     - name: repo-name
                       value: ""
+                    - name: project-key
+                      value: ""
                     - name: branch
                       value: "main"
           # Extract values from the PR-merged payload and inject them into
@@ -91,6 +83,10 @@ spec:
                 dependencyName: pr-merged-main
                 dataKey: body.pullRequest.toRef.repository.slug
               dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: pr-merged-main
+                dataKey: body.pullRequest.toRef.repository.project.key
+              dest: spec.arguments.parameters.2.value
 
     # ── Trigger 2: push → dev ─────────────────────────────────────────────────
     - template:
@@ -114,6 +110,8 @@ spec:
                       value: ""
                     - name: repo-name
                       value: ""
+                    - name: project-key
+                      value: ""
                     - name: branch
                       value: "dev"
           parameters:
@@ -125,3 +123,7 @@ spec:
                 dependencyName: push-dev
                 dataKey: body.repository.slug
               dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: push-dev
+                dataKey: body.repository.project.key
+              dest: spec.arguments.parameters.2.value
