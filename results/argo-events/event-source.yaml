@@ -11,22 +11,7 @@ spec:
         targetPort: 12000
 
   bitbucketserver:
-    pr-merged:
-      webhook:
-        port: "12000"
-        endpoint: /bitbucket
-        method: POST
-      repositories:
-        - projectKey: "PROJ"
-          repositorySlug: "repository"
-      events:
-        - "pr:merged"
-      webhookSecret:
-        name: bitbucket-webhook-token
-        key: token
-      bitbucketserverBaseURL: https://bitbucket.example.com/rest
-
-    refs-changed:
+    bitbucket:
       webhook:
         port: "12000"
         endpoint: /bitbucket
@@ -36,6 +21,7 @@ spec:
           repositorySlug: "repository"
       events:
         - "repo:refs_changed"
+        - "pr:merged"
       webhookSecret:
         name: bitbucket-webhook-token
         key: token
