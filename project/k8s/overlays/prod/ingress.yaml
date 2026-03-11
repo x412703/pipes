@@ -1,0 +1,31 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prod-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - example.com
+      secretName: exampletls
+  rules:
+    - host: example.com
+      http:
+        paths:
+          - path: /service1(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: service1
+                port:
+                  name: http
+          - path: /service2(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: service2
+                port:
+                  name: http
